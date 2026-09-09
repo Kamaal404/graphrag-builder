@@ -1,0 +1,46 @@
+services:
+  neo4j:
+    # Calendar versioning. Pin an exact tag; :latest will roll forward and break you.
+    image: neo4j:2026.07.1
+    container_name: graphrag-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"   # HTTP browser
+      - "7687:7687"   # Bolt
+    environment:
+      NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}"
+
+      # APOC is required by the neo4j-graphrag KG builder pipeline.
+      # This installs the bundled version matching the image, so year.month always lines up.
+      # Add "graph-data-science" only if you need Leiden community detection.
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_apoc_export_file_enabled: "true"
+      NEO4J_apoc_import_file_enabled: "true"
+      NEO4J_apoc_import_file_use__neo4j__config: "true"
+
+      # Note the double underscores: they encode a literal "_" in the Neo4j config key.
+      # Get these wrong and the setting is ignored silently.
+      NEO4J_server_memory_heap_initial__size: "2G"
+      NEO4J_server_memory_heap_max__size: "4G"
+      NEO4J_server_memory_pagecache__size: "2G"
+
+      # Listen on all interfaces inside the container.
+      NEO4J_server_default__listen__address: "0.0.0.0"
+
+      # Uncomment to allow CSV/JSON load from ./import
+      # NEO4J_server_directories_import: "/import"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - ./import:/import
+      - ./plugins:/plugins
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p $${NEO4J_PASSWORD} 'RETURN 1' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+
+volumes:
+  neo4j_data:
+  neo4j_logs:

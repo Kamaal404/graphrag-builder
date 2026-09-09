@@ -1,0 +1,175 @@
+name: recipes
+description: >
+  Recipe collections. One recipe is one chunk. Quantities live on edges, not as
+  nodes. Allergen and diet exclusions are one hop from Ingredient so hard Cypher
+  filters stay cheap and obviously correct.
+
+segmentation:
+  mode: structural
+  hierarchy:
+    - level: section
+      pattern: '^#\s+(.+)$'
+    - level: recipe
+      pattern: '^##\s+(.+)$'
+  chunk_at: recipe
+  max_chunk_chars: 6000
+  # Recipes are rarely over the limit; if they are, split on these headings
+  # rather than mid-instruction.
+  subsplit_pattern: '^###\s+(Ingredients|Instructions|Method|Notes)'
+  xref_patterns:
+    - name: recipe_ref
+      pattern: '(?:see|voir|cf\.)\s+(?:recipe\s+)?"([^"]+)"'
+      target_level: recipe
+      relation: PAIRS_WITH
+
+schema:
+  additional_node_types: false
+  additional_relationship_types: false
+  additional_patterns: false
+
+  node_types:
+    - label: Recipe
+      properties:
+        - {name: name, type: STRING}
+        - {name: servings, type: INTEGER}
+        - {name: prep_minutes, type: INTEGER}
+        - {name: cook_minutes, type: INTEGER}
+        - {name: difficulty, type: STRING}
+    - label: Ingredient
+      description: A canonical ingredient. Must match the controlled vocabulary.
+      properties:
+        - {name: name, type: STRING}
+        - {name: category, type: STRING}
+    - label: Technique
+      description: A cooking method (braise, emulsify, proof, temper)
+      properties:
+        - {name: name, type: STRING}
+    - label: Equipment
+      properties:
+        - {name: name, type: STRING}
+    - label: Cuisine
+      properties:
+        - {name: name, type: STRING}
+    - label: Course
+      description: Starter, main, dessert, side, breakfast
+      properties:
+        - {name: name, type: STRING}
+    - label: DietTag
+      description: vegan, vegetarian, halal, kosher, gluten-free, keto
+      properties:
+        - {name: name, type: STRING}
+    - label: Allergen
+      description: One of the recognised major allergen classes
+      properties:
+        - {name: name, type: STRING}
+
+  relationship_types:
+    - label: USES_INGREDIENT
+      properties:
+        - {name: amount, type: FLOAT}
+        - {name: unit, type: STRING}
+        - {name: preparation, type: STRING}
+        - {name: optional, type: BOOLEAN}
+    - REQUIRES_TECHNIQUE
+    - REQUIRES_EQUIPMENT
+    - BELONGS_TO
+    - IS_COURSE
+    - label: VARIANT_OF
+      description: A modified version of another recipe in the corpus
+    - PAIRS_WITH
+    - label: SUBSTITUTES_FOR
+      properties:
+        - {name: ratio, type: FLOAT}
+        - {name: context, type: STRING}
+        - {name: quality_loss, type: STRING}
+    - CONTAINS_ALLERGEN
+    - label: EXCLUDED_BY
+      description: This ingredient disqualifies a recipe from the diet tag
+    - EXCLUDES
+
+  patterns:
+    - [Recipe, USES_INGREDIENT, Ingredient]
+    - [Recipe, REQUIRES_TECHNIQUE, Technique]
+    - [Recipe, REQUIRES_EQUIPMENT, Equipment]
+    - [Recipe, BELONGS_TO, Cuisine]
+    - [Recipe, IS_COURSE, Course]
+    - [Recipe, VARIANT_OF, Recipe]
+    - [Recipe, PAIRS_WITH, Recipe]
+    - [Ingredient, SUBSTITUTES_FOR, Ingredient]
+    - [Ingredient, CONTAINS_ALLERGEN, Allergen]
+    - [Ingredient, EXCLUDED_BY, DietTag]
+    - [DietTag, EXCLUDES, Allergen]
+
+deterministic_relations: [PAIRS_WITH]
+
+# Ingredient nodes resolve against a fixed vocabulary rather than pairwise.
+# Pairwise resolution drifts; anchoring to a list does not.
+vocabulary:
+  Ingredient:
+    path: vocab/ingredients.csv     # columns: canonical,aliases,category,allergens
+    tiers: [exact, fuzzy, embedding, llm_closed_list]
+    fuzzy_threshold: 0.90
+    embedding_threshold: 0.86
+
+resolution:
+  - labels: [Ingredient]
+    strategy: vocabulary
+  - labels: [Technique, Equipment, Cuisine]
+    strategy: fuzzy
+    threshold: 0.88
+  - labels: [Allergen, DietTag, Course]
+    strategy: exact
+
+indexes:
+  vector:
+    name: chunk_embedding
+    label: Chunk
+    property: embedding
+    dimensions: 1536
+    similarity: cosine
+  fulltext:
+    name: chunk_fulltext
+    labels: [Chunk]
+    properties: [text]
+  constraints:
+    - {label: Chunk, property: id}
+    - {label: Recipe, property: name}
+    - {label: Ingredient, property: name}
+    - {label: Allergen, property: name}
+    - {label: DietTag, property: name}
+
+validation:
+  max_degree: 5000          # salt and water legitimately hit everything
+  max_degree_exempt: [salt, water, black pepper, olive oil]
+  min_provenance_coverage: 0.90
+  forbid_orphan_labels: [Ingredient, Technique]
+
+retrieval:
+  hops: 2
+  seed_labels: [Chunk]
+  # Allergen and diet exclusion is enforced here, in Cypher, never in the prompt.
+  # $exclude_allergens and $diet_tags bind from structured filter extraction.
+  expansion_query: |
+    WITH node, score
+    OPTIONAL MATCH (node)<-[:PART_OF_CHUNK]-(r:Recipe)
+    WHERE r IS NULL OR (
+      NOT EXISTS {
+        MATCH (r)-[:USES_INGREDIENT]->(:Ingredient)-[:CONTAINS_ALLERGEN]->(al:Allergen)
+        WHERE al.name IN coalesce($exclude_allergens, [])
+      }
+      AND NOT EXISTS {
+        MATCH (r)-[:USES_INGREDIENT]->(:Ingredient)-[:EXCLUDED_BY]->(dt:DietTag)
+        WHERE dt.name IN coalesce($diet_tags, [])
+      }
+    )
+    RETURN node.text                    AS text,
+           r.name                       AS recipe,
+           r.servings                   AS servings,
+           collect {
+             MATCH (r)-[u:USES_INGREDIENT]->(i:Ingredient)
+             RETURN i.name + ' ' + coalesce(toString(u.amount), '') + ' ' + coalesce(u.unit, '')
+           }                            AS ingredients,
+           collect {
+             MATCH (r)-[:REQUIRES_TECHNIQUE]->(t:Technique) RETURN t.name
+           }                            AS techniques,
+           score                        AS similarity

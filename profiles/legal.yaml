@@ -1,0 +1,204 @@
+name: legal
+description: >
+  Statutes, codes and regulations. Clause-level granularity, deterministic
+  cross-reference parsing, temporal validity on every clause.
+  Patterns below are tuned for French-language legal text (Moroccan and French
+  codes); adapt the regexes for other traditions.
+
+segmentation:
+  mode: structural
+  hierarchy:
+    - level: livre
+      pattern: '^\s*LIVRE\s+([IVXLC]+)\s*[-–—:.]?\s*(.*)$'
+    - level: titre
+      pattern: '^\s*TITRE\s+([IVXLC]+)\s*[-–—:.]?\s*(.*)$'
+    - level: chapitre
+      pattern: '^\s*CHAPITRE\s+([IVXLC0-9]+)\s*[-–—:.]?\s*(.*)$'
+    - level: section
+      pattern: '^\s*Section\s+([0-9IVXLC]+)\s*[-–—:.]?\s*(.*)$'
+    - level: article
+      pattern: '^\s*Article\s+(\d+(?:\s*(?:bis|ter|quater))?)\s*[-–—:.]?\s*(.*)$'
+  chunk_at: article
+  max_chunk_chars: 4000
+  # Sub-article split. Alinéas are the true atomic unit but articles are the
+  # retrieval unit; keep them together unless the article is long.
+  subsplit_pattern: '^\s*(\d+[°)]|[a-z]\))\s+'
+
+  xref_patterns:
+    - name: article_ref
+      pattern: '(?:art\.|articles?)\s*(\d+(?:\s*(?:bis|ter|quater))?)'
+      target_level: article
+    - name: alinea_ref
+      pattern: '(?:alin[ée]as?)\s*(\d+|premier|second)'
+      target_level: alinea
+    - name: repeal
+      pattern: '(?:abrog[ée]|abrogation de)\s+(?:l.)?articles?\s*(\d+)'
+      target_level: article
+      relation: REPEALS
+    - name: amendment
+      pattern: '(?:modifi[ée]|remplac[ée])\s+(?:l.)?articles?\s*(\d+)'
+      target_level: article
+      relation: AMENDS
+    - name: derogation
+      pattern: '(?:[Pp]ar d[ée]rogation|nonobstant)\s+(?:aux?\s+|l.)?articles?\s*(\d+)'
+      target_level: article
+      relation: DEROGATES_FROM
+    - name: subject_to
+      pattern: '(?:[Ss]ous r[ée]serve)\s+(?:des?\s+dispositions\s+)?(?:de\s+l.|du\s+)?articles?\s*(\d+)'
+      target_level: article
+      relation: EXCEPTION_TO
+
+schema:
+  additional_node_types: false
+  additional_relationship_types: false
+  additional_patterns: false
+
+  node_types:
+    - label: Act
+      description: A law, decree, code or regulation as a whole
+      properties:
+        - {name: name, type: STRING}
+        - {name: reference, type: STRING}
+        - {name: promulgated_on, type: DATE}
+    - label: Clause
+      description: A single article or numbered paragraph, the atomic legal unit
+      properties:
+        - {name: name, type: STRING}
+        - {name: number, type: STRING}
+        - {name: text, type: STRING}
+        - {name: in_force_from, type: DATE}
+        - {name: in_force_to, type: DATE}
+    - label: Definition
+      description: A term explicitly defined by the text, with its legal meaning
+      properties:
+        - {name: name, type: STRING}
+        - {name: meaning, type: STRING}
+    - label: Actor
+      description: A category of person or entity the rule addresses (employer, taxpayer, carrier)
+      properties:
+        - {name: name, type: STRING}
+    - label: Obligation
+      description: A duty, prohibition or permission imposed by a clause
+      properties:
+        - {name: name, type: STRING}
+        - {name: modality, type: STRING}   # must | must_not | may
+        - {name: deadline, type: STRING}
+    - label: Condition
+      description: A circumstance that triggers or suspends an obligation
+      properties:
+        - {name: name, type: STRING}
+    - label: Sanction
+      description: A penalty attached to breach of an obligation
+      properties:
+        - {name: name, type: STRING}
+        - {name: amount_min, type: FLOAT}
+        - {name: amount_max, type: FLOAT}
+        - {name: currency, type: STRING}
+    - label: Authority
+      description: The body empowered to enforce, authorise or adjudicate
+      properties:
+        - {name: name, type: STRING}
+    - label: Jurisdiction
+      properties:
+        - {name: name, type: STRING}
+
+  relationship_types:
+    - CONTAINS
+    - PARENT_OF
+    - label: DEFINES
+      description: The clause establishes the legal meaning of a term
+    - label: REFERS_TO
+      description: The clause cites another clause without modifying it
+    - label: AMENDS
+      description: The clause modifies the text of another clause
+      properties:
+        - {name: effective_date, type: DATE}
+    - label: REPEALS
+      properties:
+        - {name: effective_date, type: DATE}
+    - label: EXCEPTION_TO
+      description: The clause carves out a case where the target does not apply
+    - label: DEROGATES_FROM
+      description: The clause permits departure from the target under conditions
+    - label: IMPOSES
+    - label: APPLIES_TO
+      description: The obligation binds this category of actor
+    - label: CONDITIONED_ON
+    - label: SANCTIONED_BY
+    - label: ENFORCES
+    - IN_FORCE_IN
+
+  patterns:
+    - [Act, CONTAINS, Clause]
+    - [Act, IN_FORCE_IN, Jurisdiction]
+    - [Clause, PARENT_OF, Clause]
+    - [Clause, DEFINES, Definition]
+    - [Clause, REFERS_TO, Clause]
+    - [Clause, AMENDS, Clause]
+    - [Clause, REPEALS, Clause]
+    - [Clause, EXCEPTION_TO, Clause]
+    - [Clause, DEROGATES_FROM, Clause]
+    - [Clause, IMPOSES, Obligation]
+    - [Obligation, APPLIES_TO, Actor]
+    - [Obligation, CONDITIONED_ON, Condition]
+    - [Obligation, SANCTIONED_BY, Sanction]
+    - [Authority, ENFORCES, Obligation]
+
+# Which relations come from the parser rather than the LLM.
+# The extractor is told to skip these, which keeps the prompt focused.
+deterministic_relations: [CONTAINS, PARENT_OF, REFERS_TO, AMENDS, REPEALS]
+
+resolution:
+  - labels: [Actor, Authority, Jurisdiction]
+    strategy: fuzzy
+    threshold: 0.90
+  - labels: [Definition]
+    strategy: exact
+
+indexes:
+  vector:
+    name: chunk_embedding
+    label: Chunk
+    property: embedding
+    dimensions: 1536
+    similarity: cosine
+  fulltext:
+    name: chunk_fulltext
+    labels: [Chunk]
+    properties: [text]
+  constraints:
+    - {label: Chunk, property: id}
+    - {label: Document, property: path}
+    - {label: Clause, property: name}
+    - {label: Act, property: name}
+
+validation:
+  max_degree: 300           # above this, a node is almost certainly a resolution failure
+  min_provenance_coverage: 0.95
+  forbid_orphan_labels: [Obligation, Sanction, Condition]
+
+retrieval:
+  hops: 3
+  seed_labels: [Chunk]
+  # As-of filtering is on by default. Historical clauses only surface when asked for.
+  # Two layers are traversed: the parser's chunk-level cross-references, which
+  # are near-100% precision, and the LLM's entity structure. The parser layer is
+  # the one that actually pulls in the article a clause depends on.
+  expansion_query: |
+    WITH node, score
+    WHERE node.in_force_to IS NULL OR node.in_force_to > date()
+    OPTIONAL MATCH (node)-[xr:REFERS_TO|EXCEPTION_TO|DEROGATES_FROM|AMENDS]->(cited:Chunk)
+    OPTIONAL MATCH (node)<-[:PART_OF_CHUNK]-(e)
+    OPTIONAL MATCH (e)-[:IMPOSES]->(o:Obligation)
+    OPTIONAL MATCH (o)-[:APPLIES_TO]->(a:Actor)
+    OPTIONAL MATCH (o)-[:SANCTIONED_BY]->(s:Sanction)
+    OPTIONAL MATCH (e)-[:EXCEPTION_TO|DEROGATES_FROM]-(x:Clause)
+    RETURN node.text                       AS text,
+           node.path                       AS citation,
+           collect(DISTINCT {ref: type(xr), path: cited.path, text: left(cited.text, 500)})
+                                           AS cited_clauses,
+           collect(DISTINCT o.name)        AS obligations,
+           collect(DISTINCT a.name)        AS actors,
+           collect(DISTINCT s.name)        AS sanctions,
+           collect(DISTINCT x.name)        AS exceptions,
+           score                           AS similarity

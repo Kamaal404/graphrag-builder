@@ -1,0 +1,28 @@
+# secrets
+.env
+
+# pipeline artifacts
+.text-cache/
+chunks.jsonl
+graph.jsonl
+*.pages.json
+corpus/
+pdfs/
+out/
+
+# neo4j bind mounts
+plugins/
+import/
+backups/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# editors / os
+.vscode/
+.idea/
+.DS_Store
