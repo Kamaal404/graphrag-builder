@@ -23,6 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import (  # noqa: E402
     build_embedder,
+    check_embedder_dims,
     build_llm,
     database,
     extraction_hint,
@@ -97,6 +98,7 @@ async def build(args) -> None:
         sys.exit("no chunks loaded")
 
     schema = graph_schema(profile)
+    check_embedder_dims(profile)
     llm = build_llm()
     embedder = build_embedder()
 

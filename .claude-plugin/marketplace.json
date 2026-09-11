@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "graphrag-builder",
+  "description": "GraphRAG corpus-to-Neo4j pipeline as a Claude Code plugin.",
+  "owner": { "name": "Kamal" },
+  "plugins": [
+    {
+      "name": "graphrag-builder",
+      "source": "./",
+      "description": "Corpus to knowledge graph: PDF cleanup, ontology design, schema-grounded extraction, Neo4j load, validation, and graph retrieval.",
+      "category": "data",
+      "author": { "name": "Kamal" },
+      "homepage": "https://github.com/Kamaal404/graphrag-builder"
+    }
+  ]
+}

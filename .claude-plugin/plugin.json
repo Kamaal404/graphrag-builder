@@ -1,0 +1,10 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "graphrag-builder",
+  "version": "0.1.0",
+  "description": "Turn a raw corpus (laws, manuals, recipes, books) into a schema-grounded Neo4j knowledge graph with a working GraphRAG retrieval layer. Deterministic PDF and structure parsing, closed-ontology extraction, entity resolution, and validation.",
+  "author": { "name": "Kamal" },
+  "homepage": "https://github.com/Kamaal404/graphrag-builder",
+  "license": "MIT",
+  "keywords": ["graphrag", "neo4j", "knowledge-graph", "rag", "ontology", "pdf", "extraction"]
+}

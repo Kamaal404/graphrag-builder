@@ -6,3 +6,6 @@ pyyaml>=6.0
 # engine uses the pdftotext/pdffonts CLIs (apt install poppler-utils).
 pdfplumber>=0.11
 pypdf>=5.0
+
+# Local embeddings, so a Claude-only setup needs no second API vendor.
+neo4j-graphrag[anthropic,sentence-transformers]>=1.18.0

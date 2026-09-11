@@ -1,0 +1,28 @@
+# Normalize everything to LF in the repository. Windows checkouts stay usable,
+# but what ships to a Linux VPS never carries CRLF.
+* text=auto eol=lf
+
+# Scripts and tab-sensitive files must be LF, always. CRLF here produces
+# "bad interpreter: /bin/bash^M" on Linux and breaks make.
+*.sh      text eol=lf
+Makefile  text eol=lf
+*.py      text eol=lf
+*.yaml    text eol=lf
+*.yml     text eol=lf
+*.md      text eol=lf
+*.txt     text eol=lf
+.env.example text eol=lf
+
+# Binaries. Without these Git may classify a PDF as text and corrupt it with
+# line-ending conversion.
+*.pdf  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.zip  binary
+*.jar  binary
+
+# Mark executables so the bit survives a clone.
+setup.sh            text eol=lf
+tests/smoke_test.sh text eol=lf

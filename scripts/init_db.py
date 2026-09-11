@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import database, get_driver, load_profile  # noqa: E402
+from common import check_embedder_dims, database, get_driver, load_profile  # noqa: E402
 
 
 def ident(s: str) -> str:
@@ -30,6 +30,7 @@ def main() -> None:
     args = ap.parse_args()
 
     profile = load_profile(args.profile)
+    check_embedder_dims(profile)
     idx = profile.get("indexes", {})
     driver = get_driver()
     db = database(profile)

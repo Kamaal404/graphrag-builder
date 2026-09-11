@@ -1,0 +1,222 @@
+name: firecraft
+description: >
+  Practical instructional books on fire building, bushcraft and survival.
+  Built for the questions someone actually asks a book like this: what do I
+  build, from what, with what tool, in these conditions, and what will burn me.
+  The ordered procedure stays in the chunk text; the graph indexes what the
+  procedure applies to.
+
+# ---------------------------------------------------------------------------
+# Segmentation
+#
+# Book structure is not knowable in advance, so these patterns cover the common
+# cases: numbered chapters, word-numbered chapters, and the ALL-CAPS or
+# title-case section headings typical of older practical manuals.
+#
+# Tune these against the extracted .txt before extracting anything. Run:
+#   python scripts/extract_pdf.py --input <book.pdf> --out ./corpus
+#   grep -nE '^(CHAPTER|Chapter|[A-Z][A-Z ]{6,})$' corpus/<book>.txt | head -40
+# ---------------------------------------------------------------------------
+segmentation:
+  mode: structural
+  hierarchy:
+    - level: part
+      pattern: '^\s*(?:PART|Part)\s+([IVXLC0-9]+)\s*[-–—:.]?\s*(.*)$'
+    - level: chapter
+      pattern: '^\s*(?:CHAPTER|Chapter)\s+([IVXLC0-9]+|[A-Z][a-z]+)\s*[-–—:.]?\s*(.*)$'
+    - level: section
+      # ALL-CAPS headings on their own line. Common in practical manuals.
+      # Requires 4+ chars to avoid matching stray capitalised words.
+      pattern: '^([A-Z][A-Z0-9''\-]{3,}(?:\s+[A-Z0-9''\-]+){0,6})\s*$'
+  chunk_at: section
+
+  # Instructional prose is dense and a procedure should not be split across
+  # chunks; a "how do I do X" answer needs the whole method in one place.
+  max_chunk_chars: 5000
+  subsplit_pattern: '^\s*(?:Step\s+\d+|\d+[.)])\s+'
+
+  xref_patterns:
+    - name: chapter_ref
+      pattern: '(?:see|See)\s+(?:Chapter|chapter)\s+([IVXLC0-9]+)'
+      target_level: chapter
+    - name: page_ref
+      pattern: '(?:see|See)\s+(?:page|p\.)\s*(\d+)'
+      target_level: page
+
+schema:
+  additional_node_types: false
+  additional_relationship_types: false
+  additional_patterns: false
+
+  node_types:
+    - label: FireLay
+      description: >
+        A named fire structure or configuration: teepee, log cabin, star,
+        lean-to, Dakota fire hole, reflector fire, keyhole, trench.
+        The central entity of this book.
+      properties:
+        - {name: name, type: STRING}
+        - {name: build_time, type: STRING}
+        - {name: burn_character, type: STRING}   # fast/hot, long/steady, low-smoke
+        - {name: skill_level, type: STRING}
+    - label: Technique
+      description: >
+        A method of producing ignition or managing a fire: bow drill, hand
+        drill, fire plough, flint and steel, ferro rod, lens, banking, feathering.
+      properties:
+        - {name: name, type: STRING}
+        - {name: difficulty, type: STRING}
+    - label: Material
+      description: >
+        Anything consumed by the fire. The role property carries the stage.
+      properties:
+        - {name: name, type: STRING}
+        - {name: role, type: STRING}        # tinder | kindling | fuel | accelerant
+        - {name: species, type: STRING}     # birch, pine, oak
+        - {name: notes, type: STRING}       # resinous, burns fast, needs drying
+    - label: Tool
+      description: Non-consumed equipment - knife, axe, ferro rod, lens, cordage, tarp
+      properties:
+        - {name: name, type: STRING}
+        - {name: improvised, type: BOOLEAN}
+    - label: Purpose
+      description: What the fire is for - warmth, cooking, light, signaling, drying, insect repulsion
+      properties:
+        - {name: name, type: STRING}
+    - label: Condition
+      description: >
+        Environmental circumstance affecting the choice: rain, snow, high wind,
+        altitude, wet wood, no tools, damp ground, above treeline.
+      properties:
+        - {name: name, type: STRING}
+    - label: Hazard
+      description: A specific danger - carbon monoxide, ember scatter, ground fire, burns, scalding
+      properties:
+        - {name: name, type: STRING}
+        - {name: severity, type: STRING}
+    - label: SafetyRule
+      description: An explicit instruction that prevents or mitigates a hazard
+      properties:
+        - {name: name, type: STRING}
+        - {name: rule, type: STRING}
+
+  relationship_types:
+    - label: SERVES_PURPOSE
+      description: This fire lay is recommended for this purpose
+      properties:
+        - {name: suitability, type: STRING}   # ideal | workable | poor
+    - label: REQUIRES_MATERIAL
+      properties:
+        - {name: stage, type: STRING}         # tinder | kindling | fuel
+        - {name: quantity, type: STRING}
+    - label: BUILT_WITH
+      description: This technique is used to build or ignite this fire lay
+    - label: SUITED_FOR
+      description: Explicitly recommended under this condition
+    - label: UNSUITED_FOR
+      description: Explicitly warned against under this condition
+    - label: VARIANT_OF
+    - label: IGNITES
+      description: This technique produces ignition in this material
+    - label: REQUIRES_TOOL
+    - label: SUBSTITUTES_FOR
+      description: Use this material or tool when the target is unavailable
+      properties:
+        - {name: context, type: STRING}
+    - label: HAS_HAZARD
+    - label: MITIGATED_BY
+
+  patterns:
+    - [FireLay, SERVES_PURPOSE, Purpose]
+    - [FireLay, REQUIRES_MATERIAL, Material]
+    - [FireLay, BUILT_WITH, Technique]
+    - [FireLay, SUITED_FOR, Condition]
+    - [FireLay, UNSUITED_FOR, Condition]
+    - [FireLay, VARIANT_OF, FireLay]
+    - [FireLay, HAS_HAZARD, Hazard]
+    - [Technique, IGNITES, Material]
+    - [Technique, REQUIRES_TOOL, Tool]
+    - [Technique, SUITED_FOR, Condition]
+    - [Technique, UNSUITED_FOR, Condition]
+    - [Technique, HAS_HAZARD, Hazard]
+    - [Technique, VARIANT_OF, Technique]
+    - [Material, SUBSTITUTES_FOR, Material]
+    - [Material, SUITED_FOR, Condition]
+    - [Tool, SUBSTITUTES_FOR, Tool]
+    - [Hazard, MITIGATED_BY, SafetyRule]
+
+# UNSUITED_FOR is deliberately separate from SUITED_FOR rather than a polarity
+# property. A negative recommendation is the thing you most need retrieval to
+# surface, and a property is easy for a query to forget to check.
+
+deterministic_relations: []
+
+resolution:
+  - labels: [FireLay, Technique, Tool, Purpose]
+    strategy: fuzzy
+    threshold: 0.88
+  - labels: [Material, Condition]
+    # Materials arrive in many surface forms (birch bark / bark of the birch /
+    # paper birch). Semantic matching earns its cost here.
+    strategy: semantic
+  - labels: [Hazard]
+    strategy: fuzzy
+    threshold: 0.90
+
+indexes:
+  vector:
+    name: chunk_embedding
+    label: Chunk
+    property: embedding
+    # 384 = all-MiniLM-L6-v2 (local sentence-transformers).
+    # Change to 1536 if you switch to OpenAI text-embedding-3-small.
+    dimensions: 384
+    similarity: cosine
+  fulltext:
+    name: chunk_fulltext
+    labels: [Chunk]
+    properties: [text]
+  constraints:
+    - {label: Chunk, property: id}
+    - {label: FireLay, property: name}
+    - {label: Technique, property: name}
+    - {label: Material, property: name}
+    - {label: Condition, property: name}
+
+validation:
+  max_degree: 200
+  # Fire and wood appear everywhere; a high degree on these is real, not a bug.
+  max_degree_exempt: [fire, wood, tinder, kindling, fuel, dry wood]
+  min_provenance_coverage: 0.85
+  forbid_orphan_labels: [FireLay, Technique, Hazard]
+
+retrieval:
+  hops: 2
+  seed_labels: [Chunk]
+  # Hazards and negative recommendations are pulled in unconditionally. For a
+  # survival text the warning matters more than the method, and a retrieval
+  # layer that returns how to do something without what will hurt you is worse
+  # than no answer.
+  expansion_query: |
+    WITH node, score
+    OPTIONAL MATCH (node)<-[:PART_OF_CHUNK]-(e)
+    OPTIONAL MATCH (e)-[rm:REQUIRES_MATERIAL]->(m:Material)
+    OPTIONAL MATCH (e)-[:BUILT_WITH]->(t:Technique)
+    OPTIONAL MATCH (e)-[:REQUIRES_TOOL]->(tool:Tool)
+    OPTIONAL MATCH (e)-[:SERVES_PURPOSE]->(p:Purpose)
+    OPTIONAL MATCH (e)-[:SUITED_FOR]->(good:Condition)
+    OPTIONAL MATCH (e)-[:UNSUITED_FOR]->(bad:Condition)
+    OPTIONAL MATCH (e)-[:HAS_HAZARD]->(h:Hazard)
+    OPTIONAL MATCH (h)-[:MITIGATED_BY]->(sr:SafetyRule)
+    RETURN node.text                        AS text,
+           node.path                        AS citation,
+           collect(DISTINCT e.name)         AS subjects,
+           collect(DISTINCT m.name + ' (' + coalesce(rm.stage, '?') + ')') AS materials,
+           collect(DISTINCT t.name)         AS techniques,
+           collect(DISTINCT tool.name)      AS tools,
+           collect(DISTINCT p.name)         AS purposes,
+           collect(DISTINCT good.name)      AS works_when,
+           collect(DISTINCT bad.name)       AS avoid_when,
+           collect(DISTINCT h.name)         AS hazards,
+           collect(DISTINCT sr.rule)        AS safety_rules,
+           score                            AS similarity

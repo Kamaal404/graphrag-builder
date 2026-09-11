@@ -3,8 +3,31 @@
 Turn a raw corpus (laws, regulations, recipes, policies, manuals) into a
 schema-grounded Neo4j knowledge graph plus a working GraphRAG retrieval layer.
 
-Also packaged as a Claude skill: `SKILL.md` at the repo root makes the whole
-thing usable from Claude directly.
+Also a Claude Code plugin: skill, five slash commands, and a marketplace
+manifest, so the whole pipeline is usable from Claude Code directly.
+
+## Use it in Claude Code
+
+```
+/plugin marketplace add Kamaal404/graphrag-builder
+/plugin install graphrag-builder@graphrag-builder
+```
+
+Restart Claude Code, then:
+
+| Command | What it does |
+|---|---|
+| `/gr-profile <corpus>` | Design an ontology for a new corpus, with a sign-off gate before anything is extracted |
+| `/gr-ingest <profile> <corpus>` | Segment, estimate cost, dry run; stops before loading |
+| `/gr-validate <profile>` | Structural checks with an ordered diagnosis path |
+| `/gr-query <profile> <question>` | Query the graph, with hard filters kept in Cypher |
+| `/gr-cost [profile] [chunks]` | Model selection and cost estimate |
+
+The skill also triggers on its own from plain requests like "turn these PDFs into
+a knowledge graph". The commands exist for when you want a specific stage.
+
+For a personal install without the plugin system, copy or symlink the repo into
+`~/.claude/skills/graphrag-builder/`.
 
 ## Why this is not just "extract triples with an LLM"
 
@@ -85,6 +108,8 @@ any later failure is an LLM, schema or Neo4j problem rather than a parsing one.
 
 ```
 SKILL.md              skill entry point: pipeline, extraction quality tiers, working style
+.claude-plugin/       plugin.json + marketplace.json for Claude Code
+commands/             five slash commands (gr-profile, gr-ingest, gr-validate, gr-query, gr-cost)
 README.md             this file
 Makefile              wraps every stage
 setup.sh              VPS bootstrap
@@ -94,6 +119,7 @@ docker-compose.yml    Neo4j 2026.07.1 + APOC, memory tuned
 profiles/
   legal.yaml          clause-level statutes, temporal validity, French xref patterns
   recipes.yaml        recipes, allergens enforced in Cypher, canonical ingredient vocab
+  firecraft.yaml      practical/survival manuals: fire lays, materials, hazards
 
 scripts/
   extract_pdf.py      PDF to clean text + page map
@@ -102,6 +128,7 @@ scripts/
   init_db.py          constraints, vector and fulltext indexes
   validate.py         pattern violations, hubs, orphans, provenance, duplicates
   query.py            retrieval smoke test
+  list_models.py      model catalog by price, and token cost estimation
   common.py           profile loading, driver, schema translation
 
 references/
